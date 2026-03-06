@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import './App.css'
 import ResourceCalendar from './components/ResourceCalendar'
+import WeekView from './components/WeekView'
 import { RESOURCES, EVENTS } from './demoData'
 
 /** Calendar start: today at UTC midnight. */
@@ -10,22 +12,52 @@ const START_DATE = new Date(Date.UTC(
   _today.getUTCDate(),
 ))
 
+type ViewMode = 'week' | 'gantt'
+
 function App() {
+  const [view, setView] = useState<ViewMode>('week')
+
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Resource Calendar</h1>
+        <div className="app-header-row">
+          <h1>Resource Calendar</h1>
+          <div className="app-view-toggle" role="group" aria-label="View mode">
+            <button
+              className={`app-view-btn${view === 'week' ? ' app-view-btn--active' : ''}`}
+              onClick={() => setView('week')}
+            >
+              Week
+            </button>
+            <button
+              className={`app-view-btn${view === 'gantt' ? ' app-view-btn--active' : ''}`}
+              onClick={() => setView('gantt')}
+            >
+              Gantt
+            </button>
+          </div>
+        </div>
         <p className="app-subtitle">
-          120 days &mdash; UTC datetimes &middot; 5-minute precision
+          {view === 'week'
+            ? 'Week view \u2014 UTC datetimes \u00b7 2\u00a0px\u00a0/\u00a05\u00a0min'
+            : '120 days \u2014 UTC datetimes \u00b7 5-minute precision'}
         </p>
       </header>
       <main className="app-main">
-        <ResourceCalendar
-          resources={RESOURCES}
-          events={EVENTS}
-          startDate={START_DATE}
-          numDays={120}
-        />
+        {view === 'week' ? (
+          <WeekView
+            resources={RESOURCES}
+            events={EVENTS}
+            startDate={START_DATE}
+          />
+        ) : (
+          <ResourceCalendar
+            resources={RESOURCES}
+            events={EVENTS}
+            startDate={START_DATE}
+            numDays={120}
+          />
+        )}
       </main>
     </div>
   )
