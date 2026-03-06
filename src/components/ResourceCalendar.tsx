@@ -88,9 +88,7 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
   );
 
   /** Return absolute positioning style for an event bar, or null if outside range. */
-  function eventStyle(ev: CalendarEvent, resource: Resource): React.CSSProperties | null {
-    const startMs = new Date(ev.startUtc).getTime();
-    const endMs   = new Date(ev.endUtc).getTime();
+  function eventStyle(startMs: number, endMs: number, resource: Resource, eventColor?: string): React.CSSProperties | null {
     const cStart  = Math.max(startMs, calStart.getTime());
     const cEnd    = Math.min(endMs, calEnd.getTime());
     if (cEnd <= cStart) return null;
@@ -99,7 +97,7 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
     return {
       left: `${left}%`,
       width: `calc(${width}% - 2px)`,
-      backgroundColor: ev.color ?? resource.color,
+      backgroundColor: eventColor ?? resource.color,
     };
   }
 
@@ -197,12 +195,13 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
 
                   {/* Events */}
                   {rowEvents.map((ev) => {
-                    const res   = resourceMap[ev.resourceId];
-                    const style = eventStyle(ev, res);
+                    const res      = resourceMap[ev.resourceId];
+                    const startMs  = new Date(ev.startUtc).getTime();
+                    const endMs    = new Date(ev.endUtc).getTime();
+                    const style    = eventStyle(startMs, endMs, res, ev.color);
                     if (!style) return null;
-                    const durationMs = new Date(ev.endUtc).getTime() - new Date(ev.startUtc).getTime();
                     // Events shorter than 30 min get the "narrow" treatment.
-                    const isNarrow = durationMs < 30 * 60 * 1000;
+                    const isNarrow = (endMs - startMs) < 30 * 60 * 1000;
                     return (
                       <div
                         key={ev.id}

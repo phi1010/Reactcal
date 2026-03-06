@@ -3,10 +3,11 @@ import ResourceCalendar from './components/ResourceCalendar'
 import { RESOURCES, EVENTS } from './demoData'
 
 /** Calendar start: today at UTC midnight. */
+const _today = new Date()
 const START_DATE = new Date(Date.UTC(
-  new Date().getUTCFullYear(),
-  new Date().getUTCMonth(),
-  new Date().getUTCDate(),
+  _today.getUTCFullYear(),
+  _today.getUTCMonth(),
+  _today.getUTCDate(),
 ))
 
 function App() {
