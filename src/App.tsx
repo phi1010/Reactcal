@@ -3,6 +3,7 @@ import './App.css'
 import ResourceCalendar from './components/ResourceCalendar'
 import WeekView from './components/WeekView'
 import { RESOURCES, EVENTS } from './demoData'
+import type { CalendarEvent } from './types'
 
 /** Calendar start: today at UTC midnight. */
 const _today = new Date()
@@ -16,6 +17,12 @@ type ViewMode = 'week' | 'gantt'
 
 function App() {
   const [view, setView] = useState<ViewMode>('week')
+  const [events, setEvents] = useState<CalendarEvent[]>(EVENTS)
+
+  function handleEventCreate(ev: Omit<CalendarEvent, 'id'>) {
+    const id = `custom-${Date.now()}`
+    setEvents(prev => [...prev, { ...ev, id }])
+  }
 
   return (
     <div className="app">
@@ -47,13 +54,14 @@ function App() {
         {view === 'week' ? (
           <WeekView
             resources={RESOURCES}
-            events={EVENTS}
+            events={events}
             startDate={START_DATE}
+            onEventCreate={handleEventCreate}
           />
         ) : (
           <ResourceCalendar
             resources={RESOURCES}
-            events={EVENTS}
+            events={events}
             startDate={START_DATE}
             numDays={120}
           />
