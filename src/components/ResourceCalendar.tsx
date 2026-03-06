@@ -1,30 +1,51 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import type { CalendarEvent, Resource } from "../types";
 import "./ResourceCalendar.css";
 
 interface ResourceCalendarProps {
   resources: Resource[];
   events: CalendarEvent[];
-  /** Visible day start in minutes from midnight (default 8*60 = 480) */
-  dayStartMinutes?: number;
-  /** Visible day end in minutes from midnight (default 18*60 = 1080) */
-  dayEndMinutes?: number;
-  /** Column width in hours (default 2) */
-  slotHours?: number;
+  /** UTC start date for the calendar view (time component is ignored). Defaults to today. */
+  startDate?: Date;
+  /** Number of days to display (default 120). */
+  numDays?: number;
 }
 
-function formatTime(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+/** Pixels wide for each day column. */
+const DAY_COL_PX = 56;
+/** Pixels wide for the sticky resource-name column. */
+const RESOURCE_COL_PX = 160;
+
+const WEEKDAY_ABBR = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+/** Return a new Date snapped to UTC midnight for the given date. */
+function utcDayStart(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+/** Add n whole days (in ms) to a UTC date. */
+function addUtcDays(date: Date, n: number): Date {
+  return new Date(date.getTime() + n * 86_400_000);
+}
+
+/** Format a UTC ISO datetime as HH:MM (5-minute precision display). */
+function formatUtcTime(isoString: string): string {
+  const d = new Date(isoString);
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}
+
+/** Format a UTC date as YYYY-MM-DD. */
+function formatDateISO(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
 export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
   resources,
   events,
-  dayStartMinutes = 8 * 60,
-  dayEndMinutes = 18 * 60,
-  slotHours = 2,
+  startDate,
+  numDays = 120,
 }) => {
   const [tooltip, setTooltip] = useState<{
     event: CalendarEvent;
@@ -32,154 +53,177 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
     y: number;
   } | null>(null);
 
-  const totalMinutes = dayEndMinutes - dayStartMinutes;
-  const slotMinutes = slotHours * 60;
-  const slots: number[] = [];
-  for (let t = dayStartMinutes; t < dayEndMinutes; t += slotMinutes) {
-    slots.push(t);
-  }
+  // Normalise to UTC midnight.
+  const calStart = useMemo(() => utcDayStart(startDate ?? new Date()), [startDate]);
+  const calEnd   = useMemo(() => addUtcDays(calStart, numDays), [calStart, numDays]);
+  const totalMs  = calEnd.getTime() - calStart.getTime();
 
-  /** Quarter-hour grid lines within a row */
-  const quarterLines: number[] = [];
-  for (
-    let t = dayStartMinutes + 15;
-    t < dayEndMinutes;
-    t += 15
-  ) {
-    quarterLines.push(t);
-  }
+  // Build the array of day dates.
+  const days = useMemo<Date[]>(() => {
+    const arr: Date[] = [];
+    for (let i = 0; i < numDays; i++) arr.push(addUtcDays(calStart, i));
+    return arr;
+  }, [calStart, numDays]);
 
-  function eventStyle(
-    ev: CalendarEvent,
-    resource: Resource
-  ): React.CSSProperties {
-    const clampedStart = Math.max(ev.startMinutes, dayStartMinutes);
-    const clampedEnd = Math.min(ev.endMinutes, dayEndMinutes);
-    const left = ((clampedStart - dayStartMinutes) / totalMinutes) * 100;
-    const width = ((clampedEnd - clampedStart) / totalMinutes) * 100;
+  // Group consecutive days into month buckets for the two-row header.
+  const monthGroups = useMemo(() => {
+    const groups: { label: string; span: number; startIdx: number }[] = [];
+    let cur = { label: "", span: 0, startIdx: 0 };
+    days.forEach((d, i) => {
+      const label = `${MONTH_ABBR[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+      if (label !== cur.label) {
+        if (cur.span > 0) groups.push(cur);
+        cur = { label, span: 1, startIdx: i };
+      } else {
+        cur.span++;
+      }
+    });
+    if (cur.span > 0) groups.push(cur);
+    return groups;
+  }, [days]);
+
+  const resourceMap = useMemo(
+    () => Object.fromEntries(resources.map((r) => [r.id, r])),
+    [resources],
+  );
+
+  /** Return absolute positioning style for an event bar, or null if outside range. */
+  function eventStyle(startMs: number, endMs: number, resource: Resource, eventColor?: string): React.CSSProperties | null {
+    const cStart  = Math.max(startMs, calStart.getTime());
+    const cEnd    = Math.min(endMs, calEnd.getTime());
+    if (cEnd <= cStart) return null;
+    const left  = ((cStart - calStart.getTime()) / totalMs) * 100;
+    const width = ((cEnd - cStart) / totalMs) * 100;
     return {
       left: `${left}%`,
       width: `calc(${width}% - 2px)`,
-      backgroundColor: ev.color ?? resource.color,
+      backgroundColor: eventColor ?? resource.color,
     };
   }
 
-  function quarterLineStyle(minuteOfDay: number): React.CSSProperties {
-    const left = ((minuteOfDay - dayStartMinutes) / totalMinutes) * 100;
-    const isHour = minuteOfDay % 60 === 0;
-    const isSlotBoundary = minuteOfDay % slotMinutes === 0;
-    return {
-      left: `${left}%`,
-      borderLeft: isSlotBoundary
-        ? "1px solid #d1d5db"
-        : isHour
-        ? "1px dashed #e5e7eb"
-        : "1px dotted #f3f4f6",
-    };
-  }
-
-  function handleMouseEnter(
-    e: React.MouseEvent,
-    ev: CalendarEvent
-  ) {
+  function handleMouseEnter(e: React.MouseEvent, ev: CalendarEvent) {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setTooltip({ event: ev, x: rect.left + rect.width / 2, y: rect.top });
   }
-
   function handleMouseLeave() {
     setTooltip(null);
   }
 
-  const resourceMap = Object.fromEntries(resources.map((r) => [r.id, r]));
+  const totalContentWidth = numDays * DAY_COL_PX;
 
   return (
-    <div className="rc-wrapper">
-      {/* Header: resource label column + time slot columns */}
-      <div className="rc-header">
-        <div className="rc-corner" />
-        <div className="rc-timeline-header">
-          {slots.map((slot) => (
-            <div
-              key={slot}
-              className="rc-slot-label"
-              style={{ left: `${((slot - dayStartMinutes) / totalMinutes) * 100}%`, width: `${(slotMinutes / totalMinutes) * 100}%` }}
-            >
-              {formatTime(slot)}
+    <div className="rc-scroll-wrap">
+      <div className="rc-inner" style={{ minWidth: totalContentWidth + RESOURCE_COL_PX }}>
+
+        {/* ── HEADER (sticky top) ── */}
+        <div className="rc-header">
+          {/* Corner cell: sticky top + left */}
+          <div className="rc-corner" />
+
+          <div className="rc-date-header" style={{ width: totalContentWidth }}>
+            {/* Row 1: month banners */}
+            <div className="rc-month-row">
+              {monthGroups.map((g) => (
+                <div
+                  key={`${g.label}-${g.startIdx}`}
+                  className="rc-month-label"
+                  style={{ width: g.span * DAY_COL_PX }}
+                >
+                  {g.label}
+                </div>
+              ))}
             </div>
-          ))}
-          {/* End label */}
-          <div
-            className="rc-slot-label rc-slot-label--end"
-            style={{ left: "100%", width: 0 }}
-          >
-            {formatTime(dayEndMinutes)}
+
+            {/* Row 2: individual day numbers + weekday letter */}
+            <div className="rc-day-row">
+              {days.map((d, i) => {
+                const dow = d.getUTCDay();
+                const isWeekend = dow === 0 || dow === 6;
+                return (
+                  <div
+                    key={i}
+                    className={`rc-day-label${isWeekend ? " rc-day-label--weekend" : ""}`}
+                    style={{ width: DAY_COL_PX }}
+                    title={formatDateISO(d)}
+                  >
+                    <span className="rc-day-num">{d.getUTCDate()}</span>
+                    <span className="rc-day-wd">{WEEKDAY_ABBR[dow]}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Body: rows per resource */}
-      <div className="rc-body">
-        {resources.map((resource) => {
-          const rowEvents = events.filter(
-            (ev) =>
-              ev.resourceId === resource.id &&
-              ev.startMinutes < dayEndMinutes &&
-              ev.endMinutes > dayStartMinutes
-          );
+        {/* ── BODY ── */}
+        <div className="rc-body">
+          {resources.map((resource) => {
+            const rowEvents = events.filter(
+              (ev) =>
+                ev.resourceId === resource.id &&
+                new Date(ev.startUtc).getTime() < calEnd.getTime() &&
+                new Date(ev.endUtc).getTime()   > calStart.getTime(),
+            );
 
-          return (
-            <div key={resource.id} className="rc-row">
-              {/* Resource label */}
-              <div className="rc-resource-label">
-                <span
-                  className="rc-resource-dot"
-                  style={{ backgroundColor: resource.color }}
-                />
-                {resource.name}
-              </div>
-
-              {/* Event area */}
-              <div className="rc-event-area">
-                {/* Grid lines for all quarter-hour marks */}
-                {quarterLines.map((t) => (
-                  <div
-                    key={t}
-                    className="rc-grid-line"
-                    style={quarterLineStyle(t)}
+            return (
+              <div key={resource.id} className="rc-row">
+                {/* Resource label (sticky left) */}
+                <div className="rc-resource-label">
+                  <span
+                    className="rc-resource-dot"
+                    style={{ backgroundColor: resource.color }}
                   />
-                ))}
-                {/* End boundary */}
-                <div
-                  className="rc-grid-line"
-                  style={{ left: "100%", borderLeft: "1px solid #d1d5db" }}
-                />
+                  {resource.name}
+                </div>
 
-                {/* Events */}
-                {rowEvents.map((ev) => {
-                  const res = resourceMap[ev.resourceId];
-                  const duration = ev.endMinutes - ev.startMinutes;
-                  const isNarrow = duration < 30;
-                  return (
-                    <div
-                      key={ev.id}
-                      className={`rc-event${isNarrow ? " rc-event--narrow" : ""}`}
-                      style={eventStyle(ev, res)}
-                      onMouseEnter={(e) => handleMouseEnter(e, ev)}
-                      onMouseLeave={handleMouseLeave}
-                    >
-                      <span className="rc-event-title">{ev.title}</span>
-                      {!isNarrow && (
-                        <span className="rc-event-time">
-                          {formatTime(ev.startMinutes)}–{formatTime(ev.endMinutes)}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
+                {/* Event area */}
+                <div
+                  className="rc-event-area"
+                  style={{ width: totalContentWidth }}
+                >
+                  {/* Day-column background stripes */}
+                  {days.map((d, i) => {
+                    const dow = d.getUTCDay();
+                    return (
+                      <div
+                        key={i}
+                        className={`rc-day-col${dow === 0 || dow === 6 ? " rc-day-col--weekend" : ""}`}
+                        style={{ left: i * DAY_COL_PX, width: DAY_COL_PX }}
+                      />
+                    );
+                  })}
+
+                  {/* Events */}
+                  {rowEvents.map((ev) => {
+                    const res      = resourceMap[ev.resourceId];
+                    const startMs  = new Date(ev.startUtc).getTime();
+                    const endMs    = new Date(ev.endUtc).getTime();
+                    const style    = eventStyle(startMs, endMs, res, ev.color);
+                    if (!style) return null;
+                    // Events shorter than 30 min get the "narrow" treatment.
+                    const isNarrow = (endMs - startMs) < 30 * 60 * 1000;
+                    return (
+                      <div
+                        key={ev.id}
+                        className={`rc-event${isNarrow ? " rc-event--narrow" : ""}`}
+                        style={style}
+                        onMouseEnter={(e) => handleMouseEnter(e, ev)}
+                        onMouseLeave={handleMouseLeave}
+                      >
+                        <span className="rc-event-title">{ev.title}</span>
+                        {!isNarrow && (
+                          <span className="rc-event-time">
+                            {formatUtcTime(ev.startUtc)}–{formatUtcTime(ev.endUtc)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {/* Tooltip */}
@@ -190,8 +234,11 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
         >
           <strong>{tooltip.event.title}</strong>
           <br />
-          {formatTime(tooltip.event.startMinutes)} –{" "}
-          {formatTime(tooltip.event.endMinutes)}
+          {formatUtcTime(tooltip.event.startUtc)} – {formatUtcTime(tooltip.event.endUtc)} UTC
+          <br />
+          <span className="rc-tooltip-date">
+            {new Date(tooltip.event.startUtc).toISOString().slice(0, 10)}
+          </span>
         </div>
       )}
     </div>
@@ -199,3 +246,4 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
 };
 
 export default ResourceCalendar;
+

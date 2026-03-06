@@ -8,9 +8,9 @@ export interface CalendarEvent {
   id: string;
   resourceId: string;
   title: string;
-  /** Minutes from midnight */
-  startMinutes: number;
-  /** Minutes from midnight */
-  endMinutes: number;
+  /** ISO 8601 UTC datetime string, e.g. "2026-03-06T09:00:00Z" */
+  startUtc: string;
+  /** ISO 8601 UTC datetime string */
+  endUtc: string;
   color?: string;
 }
