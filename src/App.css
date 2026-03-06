@@ -23,6 +23,12 @@ body {
   gap: 4px;
 }
 
+.app-header-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .app-header h1 {
   font-size: 22px;
   font-weight: 700;
@@ -34,6 +40,39 @@ body {
   font-size: 13px;
   color: #6b7280;
   font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* View toggle */
+.app-view-toggle {
+  display: flex;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.app-view-btn {
+  padding: 5px 14px;
+  border: none;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  font-family: system-ui, -apple-system, sans-serif;
+  transition: background 0.12s, color 0.12s;
+}
+
+.app-view-btn + .app-view-btn {
+  border-left: 1px solid #d1d5db;
+}
+
+.app-view-btn:hover:not(.app-view-btn--active) {
+  background: #f3f4f6;
+}
+
+.app-view-btn--active {
+  background: #4f46e5;
+  color: #fff;
 }
 
 .app-main {
