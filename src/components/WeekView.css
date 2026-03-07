@@ -226,6 +226,7 @@
   bottom: 0;
   border-right: 1px solid #f3f4f6;
   box-sizing: border-box;
+  cursor: crosshair;
 }
 
 .wv-subcol:last-child {
@@ -262,6 +263,25 @@
   text-overflow: ellipsis;
   line-height: 1.3;
   padding: 1px 2px;
+}
+
+/* ── Drag-to-create preview ──────────────────────────────────────────────── */
+
+.wv-drag-preview {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.2);
+  border: 2px dashed rgba(59, 130, 246, 0.7);
+  pointer-events: none;
+  z-index: 4;
+  box-sizing: border-box;
+}
+
+/* Disable text selection while creating an event. */
+.wv-dragging {
+  user-select: none;
 }
 
 /* ── Tooltip ─────────────────────────────────────────────────────────────── */

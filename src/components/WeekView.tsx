@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import type { CalendarEvent, Resource } from "../types";
 import "./WeekView.css";
 
@@ -7,6 +7,16 @@ interface WeekViewProps {
   events: CalendarEvent[];
   /** Optional date to seed the initial week (shows the week containing this date). Defaults to today. */
   startDate?: Date;
+  /** Called when the user drags to create a new event. Receives the new event without an id. */
+  onEventCreate?: (event: Omit<CalendarEvent, "id">) => void;
+}
+
+interface DragState {
+  resourceId: string;
+  anchorDayIndex: number;
+  anchorMinutes: number;
+  currentDayIndex: number;
+  currentMinutes: number;
 }
 
 /** Pixels per 5-minute slot (2 px × 1 slot). */
@@ -59,7 +69,7 @@ function fmtTime(iso: string): string {
   return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 }
 
-export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate }) => {
+export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate, onEventCreate }) => {
   const initWeekStart = useMemo(
     () => getWeekMonday(startDate ?? new Date()),
     [startDate],
@@ -119,6 +129,7 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
   }
 
   function handleMouseEnter(e: React.MouseEvent, ev: CalendarEvent) {
+    if (dragRef.current) return; // suppress tooltip while dragging
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setTooltip({ ev, x: r.left + r.width / 2, y: r.top });
   }
@@ -126,8 +137,149 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
   const dayColW = resources.length * SUBCOL_PX;
   const totalW  = GUTTER_PX + 7 * dayColW;
 
+  // ── Drag-to-create ──────────────────────────────────────────────────────────
+
+  const [dragPreview, setDragPreview] = useState<DragState | null>(null);
+  /** Always-fresh ref used inside document-level event handlers. */
+  const dragRef = useRef<DragState | null>(null);
+  /** Ref to the scroll container for coordinate conversion. */
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  /** Refs so that document-level handlers always read current values without extra deps. */
+  const weekDaysRef      = useRef(weekDays);
+  const onEventCreateRef = useRef(onEventCreate);
+  const dayColWRef       = useRef(dayColW);
+  // Sync refs in a layout effect so they are always fresh before any paint.
+  useEffect(() => {
+    weekDaysRef.current    = weekDays;
+    onEventCreateRef.current = onEventCreate;
+    dayColWRef.current     = dayColW;
+  });
+
+  /** Convert a y-pixel offset (within the day column) to a snapped minute value. */
+  function pxToMinutes(y: number): number {
+    const rawMinutes = (y / SLOT_PX) * SLOT_MIN;
+    return Math.max(0, Math.min(24 * 60, Math.round(rawMinutes / SLOT_MIN) * SLOT_MIN));
+  }
+
+  /** Start a drag from a pointer position within a specific day/resource. */
+  function initDrag(clientY: number, dayIndex: number, resourceId: string) {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    const rect = scroll.getBoundingClientRect();
+    const y = clientY - rect.top + scroll.scrollTop;
+    const minutes = pxToMinutes(y);
+    const state: DragState = {
+      resourceId,
+      anchorDayIndex:   dayIndex,
+      anchorMinutes:    minutes,
+      currentDayIndex:  dayIndex,
+      currentMinutes:   minutes,
+    };
+    dragRef.current = state;
+    setDragPreview(state);
+    setTooltip(null);
+  }
+
+  // Register document-level mouse/touch handlers once; refs supply fresh values.
+  useEffect(() => {
+    function getCoords(clientX: number, clientY: number) {
+      const scroll = scrollRef.current;
+      if (!scroll) return null;
+      const rect = scroll.getBoundingClientRect();
+      const x = clientX - rect.left + scroll.scrollLeft - GUTTER_PX;
+      const y = clientY - rect.top  + scroll.scrollTop;
+      const rawMinutes = (y / SLOT_PX) * SLOT_MIN;
+      const minutes = Math.max(0, Math.min(24 * 60, Math.round(rawMinutes / SLOT_MIN) * SLOT_MIN));
+      const dayIndex = Math.max(0, Math.min(6, Math.floor(x / dayColWRef.current)));
+      return { dayIndex, minutes };
+    }
+    function updateDrag(clientX: number, clientY: number) {
+      const d = dragRef.current;
+      if (!d) return;
+      const coords = getCoords(clientX, clientY);
+      if (!coords) return;
+      const updated: DragState = {
+        ...d,
+        currentDayIndex: coords.dayIndex,
+        currentMinutes:  coords.minutes,
+      };
+      dragRef.current = updated;
+      setDragPreview(updated);
+    }
+
+    function finishDrag() {
+      const d = dragRef.current;
+      if (d) {
+        const cb = onEventCreateRef.current;
+        if (cb) {
+          const days      = weekDaysRef.current;
+          const anchorMs  = days[d.anchorDayIndex].getTime()  + d.anchorMinutes  * 60_000;
+          const currentMs = days[d.currentDayIndex].getTime() + d.currentMinutes * 60_000;
+          const startMs   = Math.min(anchorMs, currentMs);
+          const endMs     = Math.max(anchorMs, currentMs);
+          // Enforce a minimum duration of one slot.
+          const finalEndMs = Math.max(endMs, startMs + SLOT_MIN * 60_000);
+          cb({
+            resourceId: d.resourceId,
+            title:      "New Event",
+            startUtc:   new Date(startMs).toISOString(),
+            endUtc:     new Date(finalEndMs).toISOString(),
+          });
+        }
+      }
+      dragRef.current = null;
+      setDragPreview(null);
+    }
+
+    function onMouseMove(e: MouseEvent) { updateDrag(e.clientX, e.clientY); }
+    function onMouseUp()                { finishDrag(); }
+    function onTouchMove(e: TouchEvent) {
+      if (!dragRef.current) return;
+      e.preventDefault(); // prevent page scroll while dragging
+      updateDrag(e.touches[0].clientX, e.touches[0].clientY);
+    }
+    function onTouchEnd(e: TouchEvent) {
+      if (!dragRef.current) return;
+      const t = e.changedTouches[0];
+      updateDrag(t.clientX, t.clientY);
+      finishDrag();
+    }
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup",   onMouseUp);
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    document.addEventListener("touchend",  onTouchEnd);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup",   onMouseUp);
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchend",  onTouchEnd);
+    };
+  }, []); // handlers use refs for fresh values: scrollRef, dragRef, weekDaysRef, onEventCreateRef, dayColWRef
+
+  /** Return the preview block dimensions for a given (day, resourceId) cell, or null. */
+  function getDragPreview(day: Date, resourceId: string): { topPx: number; heightPx: number } | null {
+    if (!dragPreview || resourceId !== dragPreview.resourceId) return null;
+    const dayMs    = day.getTime();
+    const dayEndMs = dayMs + 86_400_000;
+    const anchorMs  = weekDays[dragPreview.anchorDayIndex].getTime()  + dragPreview.anchorMinutes  * 60_000;
+    const currentMs = weekDays[dragPreview.currentDayIndex].getTime() + dragPreview.currentMinutes * 60_000;
+    const startMs   = Math.min(anchorMs, currentMs);
+    const endMs     = Math.max(anchorMs, currentMs);
+    const finalEndMs = Math.max(endMs, startMs + SLOT_MIN * 60_000);
+    if (finalEndMs <= dayMs || startMs >= dayEndMs) return null;
+    const clampedStart = Math.max(startMs, dayMs);
+    const clampedEnd   = Math.min(finalEndMs, dayEndMs);
+    const startMin  = (clampedStart - dayMs) / 60_000;
+    const endMin    = (clampedEnd   - dayMs) / 60_000;
+    const topPx     = (startMin / SLOT_MIN) * SLOT_PX;
+    const heightPx  = Math.max(SLOT_PX * 2, ((endMin - startMin) / SLOT_MIN) * SLOT_PX); // minimum 2 slots (10 min) visible
+    return { topPx, heightPx };
+  }
+
   return (
-    <div className="wv-outer">
+    <div className={`wv-outer${dragPreview ? " wv-dragging" : ""}`}>
 
       {/* ── Navigation ─────────────────────────────────────────────────────── */}
       <div className="wv-nav">
@@ -145,7 +297,7 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
       </div>
 
       {/* ── Scrollable grid ────────────────────────────────────────────────── */}
-      <div className="wv-scroll-area">
+      <div className="wv-scroll-area" ref={scrollRef}>
         <div className="wv-inner" style={{ minWidth: totalW }}>
 
           {/* Sticky header: day titles + resource sub-headers */}
@@ -236,32 +388,50 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
                   ))}
 
                   {/* Resource sub-columns, one per resource */}
-                  {resources.map((resource, ri) => (
-                    <div
-                      key={resource.id}
-                      className="wv-subcol"
-                      style={{ left: ri * SUBCOL_PX, width: SUBCOL_PX }}
-                    >
-                      {cellEvents(day, resource.id).map(({ ev, topPx, heightPx }) => (
-                        <div
-                          key={ev.id}
-                          className="wv-event"
-                          style={{
-                            top: topPx,
-                            height: heightPx,
-                            background: ev.color ?? resource.color,
-                          }}
-                          onMouseEnter={e => handleMouseEnter(e, ev)}
-                          onMouseLeave={() => setTooltip(null)}
-                        >
-                          {/* Show title only when the event block is at least one hour tall */}
-                          {heightPx >= HOUR_PX && (
-                            <span className="wv-event-title">{ev.title}</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
+                  {resources.map((resource, ri) => {
+                    const preview = getDragPreview(day, resource.id);
+                    return (
+                      <div
+                        key={resource.id}
+                        className="wv-subcol"
+                        style={{ left: ri * SUBCOL_PX, width: SUBCOL_PX }}
+                        onMouseDown={e => {
+                          if ((e.target as HTMLElement).closest(".wv-event")) return;
+                          e.preventDefault();
+                          initDrag(e.clientY, di, resource.id);
+                        }}
+                        onTouchStart={e => {
+                          if ((e.target as HTMLElement).closest(".wv-event")) return;
+                          initDrag(e.touches[0].clientY, di, resource.id);
+                        }}
+                      >
+                        {cellEvents(day, resource.id).map(({ ev, topPx, heightPx }) => (
+                          <div
+                            key={ev.id}
+                            className="wv-event"
+                            style={{
+                              top: topPx,
+                              height: heightPx,
+                              background: ev.color ?? resource.color,
+                            }}
+                            onMouseEnter={e => handleMouseEnter(e, ev)}
+                            onMouseLeave={() => setTooltip(null)}
+                          >
+                            {/* Show title only when the event block is at least one hour tall */}
+                            {heightPx >= HOUR_PX && (
+                              <span className="wv-event-title">{ev.title}</span>
+                            )}
+                          </div>
+                        ))}
+                        {preview && (
+                          <div
+                            className="wv-drag-preview"
+                            style={{ top: preview.topPx, height: preview.heightPx }}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
