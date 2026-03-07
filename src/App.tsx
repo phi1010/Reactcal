@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import './App.css'
+import styles from './App.module.css'
 import ResourceCalendar from './components/ResourceCalendar'
 import WeekView from './components/WeekView'
 import WeekViewCombined from './components/WeekViewCombined'
@@ -31,34 +31,34 @@ function App() {
     :                       '120 days \u2014 UTC datetimes \u00b7 5-minute precision'
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <div className="app-header-row">
+    <div className={styles.app}>
+      <header className={styles.appHeader}>
+        <div className={styles.appHeaderRow}>
           <h1>Resource Calendar</h1>
-          <div className="app-view-toggle" role="group" aria-label="View mode">
+          <div className={styles.appViewToggle} role="group" aria-label="View mode">
             <button
-              className={`app-view-btn${view === 'week' ? ' app-view-btn--active' : ''}`}
+              className={`${styles.appViewBtn}${view === 'week' ? ` ${styles.appViewBtnActive}` : ''}`}
               onClick={() => setView('week')}
             >
               Week
             </button>
             <button
-              className={`app-view-btn${view === 'combined' ? ' app-view-btn--active' : ''}`}
+              className={`${styles.appViewBtn}${view === 'combined' ? ` ${styles.appViewBtnActive}` : ''}`}
               onClick={() => setView('combined')}
             >
               Combined
             </button>
             <button
-              className={`app-view-btn${view === 'gantt' ? ' app-view-btn--active' : ''}`}
+              className={`${styles.appViewBtn}${view === 'gantt' ? ` ${styles.appViewBtnActive}` : ''}`}
               onClick={() => setView('gantt')}
             >
               Gantt
             </button>
           </div>
         </div>
-        <p className="app-subtitle">{subtitle}</p>
+        <p className={styles.appSubtitle}>{subtitle}</p>
       </header>
-      <main className="app-main">
+      <main className={styles.appMain}>
         {view === 'week' ? (
           <WeekView
             resources={RESOURCES}

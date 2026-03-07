@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import type { CalendarEvent, Resource } from "../types";
-import "./WeekViewCombined.css";
+import styles from "./WeekViewCombined.module.css";
 
 interface WeekViewCombinedProps {
   resources: Resource[];
@@ -371,31 +371,31 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
   const selectedResource = resourceMap.get(selectedResourceId);
 
   return (
-    <div className={`wvc-outer${dragPreview ? " wvc-dragging" : ""}`}>
+    <div className={`${styles.wvcOuter}${dragPreview ? ` ${styles.wvcDragging}` : ''}`}>
 
       {/* ── Navigation ─────────────────────────────────────────────────────── */}
-      <div className="wvc-nav">
+      <div className={styles.wvcNav}>
         <button
-          className="wvc-nav-btn"
+          className={styles.wvcNavBtn}
           onClick={() => setWeekStart(d => addDays(d, -7))}
           aria-label="Previous week"
         >&#8249;</button>
-        <span className="wvc-week-label">{weekLabel}</span>
+        <span className={styles.wvcWeekLabel}>{weekLabel}</span>
         <button
-          className="wvc-nav-btn"
+          className={styles.wvcNavBtn}
           onClick={() => setWeekStart(d => addDays(d, 7))}
           aria-label="Next week"
         >&#8250;</button>
 
         {/* Resource selector for drag-to-create */}
         {onEventCreate && resources.length > 0 && (
-          <div className="wvc-resource-selector">
-            <label className="wvc-create-label" htmlFor="wvc-res-select">
+          <div className={styles.wvcResourceSelector}>
+            <label className={styles.wvcCreateLabel} htmlFor="wvc-res-select">
               New events for:
             </label>
             <select
               id="wvc-res-select"
-              className="wvc-res-select"
+              className={styles.wvcResSelect}
               value={selectedResourceId}
               onChange={e => setSelectedResourceId(e.target.value)}
             >
@@ -405,7 +405,7 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
             </select>
             {selectedResource && (
               <span
-                className="wvc-res-swatch"
+                className={styles.wvcResSwatch}
                 style={{ background: selectedResource.color }}
               />
             )}
@@ -414,30 +414,30 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
       </div>
 
       {/* ── Resource legend ─────────────────────────────────────────────────── */}
-      <div className="wvc-legend">
+      <div className={styles.wvcLegend}>
         {resources.map(r => (
-          <span key={r.id} className="wvc-legend-item">
-            <span className="wvc-dot" style={{ background: r.color }} />
-            <span className="wvc-legend-name">{r.name}</span>
+          <span key={r.id} className={styles.wvcLegendItem}>
+            <span className={styles.wvcDot} style={{ background: r.color }} />
+            <span className={styles.wvcLegendName}>{r.name}</span>
           </span>
         ))}
       </div>
 
       {/* ── Scrollable grid ────────────────────────────────────────────────── */}
-      <div className="wvc-scroll-area" ref={scrollRef}>
-        <div className="wvc-inner" style={{ minWidth: totalW }}>
+      <div className={styles.wvcScrollArea} ref={scrollRef}>
+        <div className={styles.wvcInner} style={{ minWidth: totalW }}>
 
           {/* Sticky header */}
-          <div className="wvc-header" ref={headerRef}>
-            <div className="wvc-corner" style={{ width: GUTTER_PX, minWidth: GUTTER_PX }} />
-            <div className="wvc-day-headers">
+          <div className={styles.wvcHeader} ref={headerRef}>
+            <div className={styles.wvcCorner} style={{ width: GUTTER_PX, minWidth: GUTTER_PX }} />
+            <div className={styles.wvcDayHeaders}>
               {weekDays.map((day, di) => {
                 const dow  = day.getUTCDay();
                 const isWE = dow === 0 || dow === 6;
                 return (
                   <div
                     key={di}
-                    className={`wvc-day-hdr${isWE ? " wvc-day-hdr--we" : ""}`}
+                    className={`${styles.wvcDayHdr}${isWE ? ` ${styles.wvcDayHdrWe}` : ''}`}
                     style={{ width: COL_PX, minWidth: COL_PX }}
                   >
                     {WEEKDAY_SHORT[dow]}&nbsp;{day.getUTCDate()}&nbsp;{MONTH_SHORT[day.getUTCMonth()]}
@@ -448,17 +448,17 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
           </div>
 
           {/* Body: time gutter + day columns */}
-          <div className="wvc-body">
+          <div className={styles.wvcBody}>
 
             {/* Time gutter */}
             <div
-              className="wvc-gutter"
+              className={styles.wvcGutter}
               style={{ width: GUTTER_PX, minWidth: GUTTER_PX, height: DAY_H_PX }}
             >
               {HOURS_24.map(h => (
                 <div
                   key={h}
-                  className="wvc-hour-label"
+                  className={styles.wvcHourLabel}
                   style={{ top: h * HOUR_PX, height: HOUR_PX }}
                 >
                   {fmtHour(h)}
@@ -476,15 +476,15 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
               return (
                 <div
                   key={di}
-                  className={`wvc-day-col${isWE ? " wvc-day-col--we" : ""}`}
+                  className={`${styles.wvcDayCol}${isWE ? ` ${styles.wvcDayColWe}` : ''}`}
                   style={{ width: COL_PX, height: DAY_H_PX }}
                   onMouseDown={e => {
-                    if ((e.target as HTMLElement).closest(".wvc-event")) return;
+                    if ((e.target as HTMLElement).closest("[data-event]")) return;
                     e.preventDefault();
                     initDrag(e.clientY, di);
                   }}
                   onTouchStart={e => {
-                    if ((e.target as HTMLElement).closest(".wvc-event")) return;
+                    if ((e.target as HTMLElement).closest("[data-event]")) return;
                     initDrag(e.touches[0].clientY, di);
                   }}
                 >
@@ -492,7 +492,7 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
                   {HOURS_24.map(h => (
                     <div
                       key={h}
-                      className="wvc-hour-line"
+                      className={styles.wvcHourLine}
                       style={{ top: h * HOUR_PX }}
                     />
                   ))}
@@ -501,7 +501,7 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
                   {HOURS_24.map(h => (
                     <div
                       key={h}
-                      className="wvc-half-line"
+                      className={styles.wvcHalfLine}
                       style={{ top: h * HOUR_PX + HOUR_PX / 2 }}
                     />
                   ))}
@@ -510,7 +510,8 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
                   {positioned.map(({ ev, topPx, heightPx, leftPx, widthPx, color }) => (
                     <div
                       key={ev.id}
-                      className="wvc-event"
+                      data-event="true"
+                      className={styles.wvcEvent}
                       style={{
                         top:        topPx,
                         height:     heightPx,
@@ -522,21 +523,21 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
                       onMouseLeave={() => setTooltip(null)}
                     >
                       {heightPx >= HOUR_PX && (
-                        <span className="wvc-event-title">{ev.title}</span>
+                        <span className={styles.wvcEventTitle}>{ev.title}</span>
                       )}
                     </div>
                   ))}
 
                   {/* Drag strip – always-empty right zone for drag-to-create */}
                   <div
-                    className="wvc-drag-strip"
+                    className={styles.wvcDragStrip}
                     style={{ left: USABLE_PX, width: DRAG_STRIP_PX }}
                   />
 
                   {/* Drag preview */}
                   {preview && (
                     <div
-                      className="wvc-drag-preview"
+                      className={styles.wvcDragPreview}
                       style={{
                         top:    preview.topPx,
                         height: preview.heightPx,
@@ -558,18 +559,18 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
       {/* Tooltip */}
       {tooltip && (
         <div
-          className="wvc-tooltip"
+          className={styles.wvcTooltip}
           style={{ left: tooltip.x, top: tooltip.y }}
         >
           <strong>{tooltip.ev.title}</strong>
           <br />
           {fmtTime(tooltip.ev.startUtc)} – {fmtTime(tooltip.ev.endUtc)} UTC
           <br />
-          <span className="wvc-tooltip-date">
+          <span className={styles.wvcTooltipDate}>
             {new Date(tooltip.ev.startUtc).toISOString().slice(0, 10)}
           </span>
           <br />
-          <span className="wvc-tooltip-resource">
+          <span className={styles.wvcTooltipResource}>
             {resourceMap.get(tooltip.ev.resourceId)?.name ?? tooltip.ev.resourceId}
           </span>
         </div>
