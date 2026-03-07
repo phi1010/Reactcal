@@ -2,6 +2,7 @@ import { useState } from 'react'
 import './App.css'
 import ResourceCalendar from './components/ResourceCalendar'
 import WeekView from './components/WeekView'
+import WeekViewCombined from './components/WeekViewCombined'
 import { RESOURCES, EVENTS } from './demoData'
 import type { CalendarEvent } from './types'
 
@@ -13,7 +14,7 @@ const START_DATE = new Date(Date.UTC(
   _today.getUTCDate(),
 ))
 
-type ViewMode = 'week' | 'gantt'
+type ViewMode = 'week' | 'combined' | 'gantt'
 
 function App() {
   const [view, setView] = useState<ViewMode>('week')
@@ -23,6 +24,11 @@ function App() {
     const id = `custom-${Date.now()}`
     setEvents(prev => [...prev, { ...ev, id }])
   }
+
+  const subtitle =
+    view === 'week'     ? 'Week view \u2014 one column per resource per day \u00b7 UTC'
+    : view === 'combined' ? 'Combined week view \u2014 all resources share each day column \u00b7 UTC'
+    :                       '120 days \u2014 UTC datetimes \u00b7 5-minute precision'
 
   return (
     <div className="app">
@@ -37,6 +43,12 @@ function App() {
               Week
             </button>
             <button
+              className={`app-view-btn${view === 'combined' ? ' app-view-btn--active' : ''}`}
+              onClick={() => setView('combined')}
+            >
+              Combined
+            </button>
+            <button
               className={`app-view-btn${view === 'gantt' ? ' app-view-btn--active' : ''}`}
               onClick={() => setView('gantt')}
             >
@@ -44,15 +56,18 @@ function App() {
             </button>
           </div>
         </div>
-        <p className="app-subtitle">
-          {view === 'week'
-            ? 'Week view \u2014 UTC datetimes \u00b7 2\u00a0px\u00a0/\u00a05\u00a0min'
-            : '120 days \u2014 UTC datetimes \u00b7 5-minute precision'}
-        </p>
+        <p className="app-subtitle">{subtitle}</p>
       </header>
       <main className="app-main">
         {view === 'week' ? (
           <WeekView
+            resources={RESOURCES}
+            events={events}
+            startDate={START_DATE}
+            onEventCreate={handleEventCreate}
+          />
+        ) : view === 'combined' ? (
+          <WeekViewCombined
             resources={RESOURCES}
             events={events}
             startDate={START_DATE}
