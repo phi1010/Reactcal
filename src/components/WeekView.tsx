@@ -144,6 +144,8 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
   const dragRef = useRef<DragState | null>(null);
   /** Ref to the scroll container for coordinate conversion. */
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** Ref to the sticky header so its height can be subtracted from y-coordinate calculations. */
+  const headerRef = useRef<HTMLDivElement>(null);
 
   /** Refs so that document-level handlers always read current values without extra deps. */
   const weekDaysRef      = useRef(weekDays);
@@ -167,7 +169,8 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
     const scroll = scrollRef.current;
     if (!scroll) return;
     const rect = scroll.getBoundingClientRect();
-    const y = clientY - rect.top + scroll.scrollTop;
+    const headerH = headerRef.current?.offsetHeight ?? 0;
+    const y = clientY - rect.top + scroll.scrollTop - headerH;
     const minutes = pxToMinutes(y);
     const state: DragState = {
       resourceId,
@@ -187,8 +190,9 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
       const scroll = scrollRef.current;
       if (!scroll) return null;
       const rect = scroll.getBoundingClientRect();
+      const headerH = headerRef.current?.offsetHeight ?? 0;
       const x = clientX - rect.left + scroll.scrollLeft - GUTTER_PX;
-      const y = clientY - rect.top  + scroll.scrollTop;
+      const y = clientY - rect.top  + scroll.scrollTop - headerH;
       const rawMinutes = (y / SLOT_PX) * SLOT_MIN;
       const minutes = Math.max(0, Math.min(24 * 60, Math.round(rawMinutes / SLOT_MIN) * SLOT_MIN));
       const dayIndex = Math.max(0, Math.min(6, Math.floor(x / dayColWRef.current)));
@@ -301,7 +305,7 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
         <div className="wv-inner" style={{ minWidth: totalW }}>
 
           {/* Sticky header: day titles + resource sub-headers */}
-          <div className="wv-header">
+          <div className="wv-header" ref={headerRef}>
             {/* Corner cell – sticky in both top and left */}
             <div className="wv-corner" style={{ width: GUTTER_PX, minWidth: GUTTER_PX }} />
 
