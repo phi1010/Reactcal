@@ -306,6 +306,38 @@
   user-select: none;
 }
 
+/* ── Stacked layout (narrow containers) ─────────────────────────────────── */
+
+.wvc-stacked-section {
+  border-bottom: 2px solid #d1d5db;
+}
+
+.wvc-stacked-section:last-child {
+  border-bottom: none;
+}
+
+.wvc-stacked-hdr {
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 11px;
+  color: #374151;
+  padding: 5px 6px;
+  background: #f9fafb;
+  border-bottom: 1px solid #d1d5db;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.wvc-stacked-hdr--we {
+  background: #f3f4f6;
+}
+
 /* ── Tooltip ─────────────────────────────────────────────────────────────── */
 
 .wvc-tooltip {

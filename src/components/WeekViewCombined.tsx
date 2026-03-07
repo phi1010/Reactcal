@@ -38,16 +38,20 @@ const HOUR_PX = (60 / SLOT_MIN) * SLOT_PX; // 24 px
 const DAY_H_PX = 24 * HOUR_PX; // 576 px
 /** Width of the sticky time-gutter column. */
 const GUTTER_PX = 52;
-/** Total width of each day column. */
+/** Default/fallback total width of each day column (used before first measurement). */
 const COL_PX = 140;
 /** Right strip (px) reserved as an empty drag-to-create zone. */
 const DRAG_STRIP_PX = 16;
-/** Usable width available for event rendering. */
-const USABLE_PX = COL_PX - DRAG_STRIP_PX; // 124 px
 /** Milliseconds per minute. */
 const MS_PER_MIN = 60_000;
 /** Minimum height of the drag preview block in slots (10 min visible). */
 const MIN_PREVIEW_SLOTS = 2;
+/** Minimum day-column width (px) before switching to the stacked layout. */
+const MIN_COL_PX = 100;
+/** Height (px) of each day-section header in the stacked layout. */
+const STACKED_SECTION_HDR_PX = 26;
+/** Total height (px) of one stacked day section: header + column body. */
+const STACKED_SECTION_H = STACKED_SECTION_HDR_PX + DAY_H_PX;
 
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const MONTH_SHORT = [
@@ -133,6 +137,31 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
     y: number;
   } | null>(null);
 
+  // ── Container-width tracking ──────────────────────────────────────────────
+
+  /** Measured width of the scroll area (updated by ResizeObserver). */
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  /**
+   * True when the container is too narrow to show all 7 days side-by-side
+   * (each column would be narrower than MIN_COL_PX).
+   */
+  const isStacked = useMemo(
+    () => containerWidth > 0 && containerWidth < GUTTER_PX + 7 * MIN_COL_PX,
+    [containerWidth],
+  );
+
+  /** Width of each day column – fills the available space equally. */
+  const colPx = useMemo(() => {
+    if (containerWidth <= 0) return COL_PX; // before first measurement
+    return isStacked
+      ? containerWidth - GUTTER_PX  // full width when stacked (one column per section)
+      : (containerWidth - GUTTER_PX) / 7;
+  }, [containerWidth, isStacked]);
+
+  /** Usable pixel width available for event rendering (column minus drag strip). */
+  const usablePx = colPx - DRAG_STRIP_PX;
+
   const weekLabel = useMemo(() => {
     const last = addDays(weekStart, 6);
     if (weekStart.getUTCMonth() === last.getUTCMonth()) {
@@ -162,7 +191,7 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
    *    (events that don't overlap can reuse the same slot index).
    * 4. For each event, find the maximum slot index among all events concurrent
    *    with it – that gives the total column count for its overlap group.
-   * 5. Width  = USABLE_PX / numCols
+   * 5. Width  = usablePx / numCols
    *    Left   = slotIndex × width
    */
   function layoutDayEvents(day: Date): PositionedEvent[] {
@@ -216,7 +245,7 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
       }, slotIdx[i]);
 
       const numCols  = maxSlot + 1;
-      const colWidth = USABLE_PX / numCols;
+      const colWidth = usablePx / numCols;
       const resource = resourceMap.get(item.ev.resourceId);
 
       return {
@@ -244,19 +273,41 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
   const headerRef      = useRef<HTMLDivElement>(null);
   const weekDaysRef      = useRef(weekDays);
   const onEventCreateRef = useRef(onEventCreate);
+  const isStackedRef     = useRef(isStacked);
+  const colPxRef         = useRef(colPx);
 
   useEffect(() => {
     weekDaysRef.current      = weekDays;
     onEventCreateRef.current = onEventCreate;
+    isStackedRef.current     = isStacked;
+    colPxRef.current         = colPx;
   });
+
+  // ── ResizeObserver: measure scroll area width ─────────────────────────────
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setContainerWidth(entry.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   function initDrag(clientY: number, dayIndex: number) {
     if (!selectedResourceId) return;
     const scroll = scrollRef.current;
     if (!scroll) return;
-    const rect    = scroll.getBoundingClientRect();
-    const headerH = headerRef.current?.offsetHeight ?? 0;
-    const y       = clientY - rect.top + scroll.scrollTop - headerH;
+    const rect = scroll.getBoundingClientRect();
+    let y: number;
+    if (isStacked) {
+      // In stacked mode each day section has its own header above the column body.
+      y = clientY - rect.top + scroll.scrollTop - dayIndex * STACKED_SECTION_H - STACKED_SECTION_HDR_PX;
+    } else {
+      const headerH = headerRef.current?.offsetHeight ?? 0;
+      y = clientY - rect.top + scroll.scrollTop - headerH;
+    }
     const minutes = pxToMinutes(y);
     const state: DragState = {
       resourceId:      selectedResourceId,
@@ -274,13 +325,25 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
     function getCoords(clientX: number, clientY: number) {
       const scroll = scrollRef.current;
       if (!scroll) return null;
-      const rect    = scroll.getBoundingClientRect();
+      const rect = scroll.getBoundingClientRect();
+
+      if (isStackedRef.current) {
+        // Stacked layout: day index is determined from the y position of the cursor.
+        const y = clientY - rect.top + scroll.scrollTop;
+        const dayIndex = Math.max(0, Math.min(6, Math.floor(y / STACKED_SECTION_H)));
+        const yInColumn = y - dayIndex * STACKED_SECTION_H - STACKED_SECTION_HDR_PX;
+        const rawMinutes = (yInColumn / SLOT_PX) * SLOT_MIN;
+        const minutes = Math.max(0, Math.min(24 * 60, Math.round(rawMinutes / SLOT_MIN) * SLOT_MIN));
+        return { dayIndex, minutes };
+      }
+
+      // Horizontal layout.
       const headerH = headerRef.current?.offsetHeight ?? 0;
       const x       = clientX - rect.left + scroll.scrollLeft - GUTTER_PX;
       const y       = clientY - rect.top  + scroll.scrollTop  - headerH;
       const rawMinutes = (y / SLOT_PX) * SLOT_MIN;
       const minutes  = Math.max(0, Math.min(24 * 60, Math.round(rawMinutes / SLOT_MIN) * SLOT_MIN));
-      const dayIndex = Math.max(0, Math.min(6, Math.floor(x / COL_PX)));
+      const dayIndex = Math.max(0, Math.min(6, Math.floor(x / colPxRef.current)));
       return { dayIndex, minutes };
     }
 
@@ -367,8 +430,86 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
     return { topPx, heightPx };
   }
 
-  const totalW           = GUTTER_PX + 7 * COL_PX;
   const selectedResource = resourceMap.get(selectedResourceId);
+
+  /** Render the interior of a single day column (shared between horizontal and stacked layouts). */
+  function renderDayCol(day: Date, di: number) {
+    const dow        = day.getUTCDay();
+    const isWE       = dow === 0 || dow === 6;
+    const positioned = layoutDayEvents(day);
+    const preview    = getDragPreview(day);
+
+    return (
+      <div
+        key={di}
+        className={`${styles.wvcDayCol}${isWE ? ` ${styles.wvcDayColWe}` : ''}`}
+        style={isStacked ? { flex: 1, height: DAY_H_PX } : { width: colPx, height: DAY_H_PX }}
+        onMouseDown={e => {
+          if ((e.target as HTMLElement).closest("[data-event]")) return;
+          e.preventDefault();
+          initDrag(e.clientY, di);
+        }}
+        onTouchStart={e => {
+          if ((e.target as HTMLElement).closest("[data-event]")) return;
+          initDrag(e.touches[0].clientY, di);
+        }}
+      >
+        {/* Hour gridlines */}
+        {HOURS_24.map(h => (
+          <div key={h} className={styles.wvcHourLine} style={{ top: h * HOUR_PX }} />
+        ))}
+
+        {/* Half-hour tick marks */}
+        {HOURS_24.map(h => (
+          <div key={h} className={styles.wvcHalfLine} style={{ top: h * HOUR_PX + HOUR_PX / 2 }} />
+        ))}
+
+        {/* Events (all resources, overlap-laid out) */}
+        {positioned.map(({ ev, topPx, heightPx, leftPx, widthPx, color }) => (
+          <div
+            key={ev.id}
+            data-event="true"
+            className={styles.wvcEvent}
+            style={{
+              top:        topPx,
+              height:     heightPx,
+              left:       leftPx,
+              width:      widthPx,
+              background: color,
+            }}
+            onMouseEnter={e => handleMouseEnter(e, ev)}
+            onMouseLeave={() => setTooltip(null)}
+          >
+            {heightPx >= HOUR_PX && (
+              <span className={styles.wvcEventTitle}>{ev.title}</span>
+            )}
+          </div>
+        ))}
+
+        {/* Drag strip – always-empty right zone for drag-to-create */}
+        <div
+          className={styles.wvcDragStrip}
+          style={{ left: usablePx, width: DRAG_STRIP_PX }}
+        />
+
+        {/* Drag preview – spans the full column width including the drag strip */}
+        {preview && (
+          <div
+            className={styles.wvcDragPreview}
+            style={{
+              top:    preview.topPx,
+              height: preview.heightPx,
+              right:  1,
+              ...(selectedResource && {
+                background:  hexToRgba(selectedResource.color, 0.2),
+                borderColor: hexToRgba(selectedResource.color, 0.7),
+              }),
+            }}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={`${styles.wvcOuter}${dragPreview ? ` ${styles.wvcDragging}` : ''}`}>
@@ -425,134 +566,85 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
 
       {/* ── Scrollable grid ────────────────────────────────────────────────── */}
       <div className={styles.wvcScrollArea} ref={scrollRef}>
-        <div className={styles.wvcInner} style={{ minWidth: totalW }}>
+        <div className={styles.wvcInner}>
 
-          {/* Sticky header */}
-          <div className={styles.wvcHeader} ref={headerRef}>
-            <div className={styles.wvcCorner} style={{ width: GUTTER_PX, minWidth: GUTTER_PX }} />
-            <div className={styles.wvcDayHeaders}>
-              {weekDays.map((day, di) => {
-                const dow  = day.getUTCDay();
-                const isWE = dow === 0 || dow === 6;
-                return (
-                  <div
-                    key={di}
-                    className={`${styles.wvcDayHdr}${isWE ? ` ${styles.wvcDayHdrWe}` : ''}`}
-                    style={{ width: COL_PX, minWidth: COL_PX }}
-                  >
+          {isStacked ? (
+            /* ── Stacked layout: one day section per row ───────────────────── */
+            weekDays.map((day, di) => {
+              const dow  = day.getUTCDay();
+              const isWE = dow === 0 || dow === 6;
+              return (
+                <div key={di} className={styles.wvcStackedSection}>
+                  {/* Day section header */}
+                  <div className={`${styles.wvcStackedHdr}${isWE ? ` ${styles.wvcStackedHdrWe}` : ''}`}>
+                    <div style={{ width: GUTTER_PX, minWidth: GUTTER_PX, flexShrink: 0 }} />
                     {WEEKDAY_SHORT[dow]}&nbsp;{day.getUTCDate()}&nbsp;{MONTH_SHORT[day.getUTCMonth()]}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Body: time gutter + day columns */}
-          <div className={styles.wvcBody}>
-
-            {/* Time gutter */}
-            <div
-              className={styles.wvcGutter}
-              style={{ width: GUTTER_PX, minWidth: GUTTER_PX, height: DAY_H_PX }}
-            >
-              {HOURS_24.map(h => (
-                <div
-                  key={h}
-                  className={styles.wvcHourLabel}
-                  style={{ top: h * HOUR_PX, height: HOUR_PX }}
-                >
-                  {fmtHour(h)}
-                </div>
-              ))}
-            </div>
-
-            {/* Seven day columns */}
-            {weekDays.map((day, di) => {
-              const dow        = day.getUTCDay();
-              const isWE       = dow === 0 || dow === 6;
-              const positioned = layoutDayEvents(day);
-              const preview    = getDragPreview(day);
-
-              return (
-                <div
-                  key={di}
-                  className={`${styles.wvcDayCol}${isWE ? ` ${styles.wvcDayColWe}` : ''}`}
-                  style={{ width: COL_PX, height: DAY_H_PX }}
-                  onMouseDown={e => {
-                    if ((e.target as HTMLElement).closest("[data-event]")) return;
-                    e.preventDefault();
-                    initDrag(e.clientY, di);
-                  }}
-                  onTouchStart={e => {
-                    if ((e.target as HTMLElement).closest("[data-event]")) return;
-                    initDrag(e.touches[0].clientY, di);
-                  }}
-                >
-                  {/* Hour gridlines */}
-                  {HOURS_24.map(h => (
+                  {/* Day section body: gutter + column */}
+                  <div className={styles.wvcBody}>
                     <div
-                      key={h}
-                      className={styles.wvcHourLine}
-                      style={{ top: h * HOUR_PX }}
-                    />
-                  ))}
-
-                  {/* Half-hour tick marks */}
-                  {HOURS_24.map(h => (
-                    <div
-                      key={h}
-                      className={styles.wvcHalfLine}
-                      style={{ top: h * HOUR_PX + HOUR_PX / 2 }}
-                    />
-                  ))}
-
-                  {/* Events (all resources, overlap-laid out) */}
-                  {positioned.map(({ ev, topPx, heightPx, leftPx, widthPx, color }) => (
-                    <div
-                      key={ev.id}
-                      data-event="true"
-                      className={styles.wvcEvent}
-                      style={{
-                        top:        topPx,
-                        height:     heightPx,
-                        left:       leftPx,
-                        width:      widthPx,
-                        background: color,
-                      }}
-                      onMouseEnter={e => handleMouseEnter(e, ev)}
-                      onMouseLeave={() => setTooltip(null)}
+                      className={styles.wvcGutter}
+                      style={{ width: GUTTER_PX, minWidth: GUTTER_PX, height: DAY_H_PX }}
                     >
-                      {heightPx >= HOUR_PX && (
-                        <span className={styles.wvcEventTitle}>{ev.title}</span>
-                      )}
+                      {HOURS_24.map(h => (
+                        <div
+                          key={h}
+                          className={styles.wvcHourLabel}
+                          style={{ top: h * HOUR_PX, height: HOUR_PX }}
+                        >
+                          {fmtHour(h)}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-
-                  {/* Drag strip – always-empty right zone for drag-to-create */}
-                  <div
-                    className={styles.wvcDragStrip}
-                    style={{ left: USABLE_PX, width: DRAG_STRIP_PX }}
-                  />
-
-                  {/* Drag preview */}
-                  {preview && (
-                    <div
-                      className={styles.wvcDragPreview}
-                      style={{
-                        top:    preview.topPx,
-                        height: preview.heightPx,
-                        right:  DRAG_STRIP_PX + 1,
-                        ...(selectedResource && {
-                          background:  hexToRgba(selectedResource.color, 0.2),
-                          borderColor: hexToRgba(selectedResource.color, 0.7),
-                        }),
-                      }}
-                    />
-                  )}
+                    {renderDayCol(day, di)}
+                  </div>
                 </div>
               );
-            })}
-          </div>
+            })
+          ) : (
+            /* ── Horizontal layout: sticky header + body ───────────────────── */
+            <>
+              {/* Sticky header */}
+              <div className={styles.wvcHeader} ref={headerRef}>
+                <div className={styles.wvcCorner} style={{ width: GUTTER_PX, minWidth: GUTTER_PX }} />
+                <div className={styles.wvcDayHeaders}>
+                  {weekDays.map((day, di) => {
+                    const dow  = day.getUTCDay();
+                    const isWE = dow === 0 || dow === 6;
+                    return (
+                      <div
+                        key={di}
+                        className={`${styles.wvcDayHdr}${isWE ? ` ${styles.wvcDayHdrWe}` : ''}`}
+                        style={{ width: colPx }}
+                      >
+                        {WEEKDAY_SHORT[dow]}&nbsp;{day.getUTCDate()}&nbsp;{MONTH_SHORT[day.getUTCMonth()]}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Body: time gutter + day columns */}
+              <div className={styles.wvcBody}>
+                <div
+                  className={styles.wvcGutter}
+                  style={{ width: GUTTER_PX, minWidth: GUTTER_PX, height: DAY_H_PX }}
+                >
+                  {HOURS_24.map(h => (
+                    <div
+                      key={h}
+                      className={styles.wvcHourLabel}
+                      style={{ top: h * HOUR_PX, height: HOUR_PX }}
+                    >
+                      {fmtHour(h)}
+                    </div>
+                  ))}
+                </div>
+                {weekDays.map((day, di) => renderDayCol(day, di))}
+              </div>
+            </>
+          )}
+
         </div>
       </div>
 
