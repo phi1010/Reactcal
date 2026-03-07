@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import type { CalendarEvent, Resource } from "../types";
-import "./ResourceCalendar.css";
+import styles from "./ResourceCalendar.module.css";
 
 interface ResourceCalendarProps {
   resources: Resource[];
@@ -112,21 +112,21 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
   const totalContentWidth = numDays * DAY_COL_PX;
 
   return (
-    <div className="rc-scroll-wrap">
-      <div className="rc-inner" style={{ minWidth: totalContentWidth + RESOURCE_COL_PX }}>
+    <div className={styles.rcScrollWrap}>
+      <div className={styles.rcInner} style={{ minWidth: totalContentWidth + RESOURCE_COL_PX }}>
 
         {/* ── HEADER (sticky top) ── */}
-        <div className="rc-header">
+        <div className={styles.rcHeader}>
           {/* Corner cell: sticky top + left */}
-          <div className="rc-corner" />
+          <div className={styles.rcCorner} />
 
-          <div className="rc-date-header" style={{ width: totalContentWidth }}>
+          <div className={styles.rcDateHeader} style={{ width: totalContentWidth }}>
             {/* Row 1: month banners */}
-            <div className="rc-month-row">
+            <div className={styles.rcMonthRow}>
               {monthGroups.map((g) => (
                 <div
                   key={`${g.label}-${g.startIdx}`}
-                  className="rc-month-label"
+                  className={styles.rcMonthLabel}
                   style={{ width: g.span * DAY_COL_PX }}
                 >
                   {g.label}
@@ -135,19 +135,19 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
             </div>
 
             {/* Row 2: individual day numbers + weekday letter */}
-            <div className="rc-day-row">
+            <div className={styles.rcDayRow}>
               {days.map((d, i) => {
                 const dow = d.getUTCDay();
                 const isWeekend = dow === 0 || dow === 6;
                 return (
                   <div
                     key={i}
-                    className={`rc-day-label${isWeekend ? " rc-day-label--weekend" : ""}`}
+                    className={`${styles.rcDayLabel}${isWeekend ? ` ${styles.rcDayLabelWeekend}` : ''}`}
                     style={{ width: DAY_COL_PX }}
                     title={formatDateISO(d)}
                   >
-                    <span className="rc-day-num">{d.getUTCDate()}</span>
-                    <span className="rc-day-wd">{WEEKDAY_ABBR[dow]}</span>
+                    <span className={styles.rcDayNum}>{d.getUTCDate()}</span>
+                    <span className={styles.rcDayWd}>{WEEKDAY_ABBR[dow]}</span>
                   </div>
                 );
               })}
@@ -156,7 +156,7 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
         </div>
 
         {/* ── BODY ── */}
-        <div className="rc-body">
+        <div className={styles.rcBody}>
           {resources.map((resource) => {
             const rowEvents = events.filter(
               (ev) =>
@@ -166,11 +166,11 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
             );
 
             return (
-              <div key={resource.id} className="rc-row">
+              <div key={resource.id} className={styles.rcRow}>
                 {/* Resource label (sticky left) */}
-                <div className="rc-resource-label">
+                <div className={styles.rcResourceLabel}>
                   <span
-                    className="rc-resource-dot"
+                    className={styles.rcResourceDot}
                     style={{ backgroundColor: resource.color }}
                   />
                   {resource.name}
@@ -178,7 +178,7 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
 
                 {/* Event area */}
                 <div
-                  className="rc-event-area"
+                  className={styles.rcEventArea}
                   style={{ width: totalContentWidth }}
                 >
                   {/* Day-column background stripes */}
@@ -187,7 +187,7 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
                     return (
                       <div
                         key={i}
-                        className={`rc-day-col${dow === 0 || dow === 6 ? " rc-day-col--weekend" : ""}`}
+                        className={`${styles.rcDayCol}${dow === 0 || dow === 6 ? ` ${styles.rcDayColWeekend}` : ''}`}
                         style={{ left: i * DAY_COL_PX, width: DAY_COL_PX }}
                       />
                     );
@@ -205,14 +205,14 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
                     return (
                       <div
                         key={ev.id}
-                        className={`rc-event${isNarrow ? " rc-event--narrow" : ""}`}
+                        className={`${styles.rcEvent}${isNarrow ? ` ${styles.rcEventNarrow}` : ''}`}
                         style={style}
                         onMouseEnter={(e) => handleMouseEnter(e, ev)}
                         onMouseLeave={handleMouseLeave}
                       >
-                        <span className="rc-event-title">{ev.title}</span>
+                        <span className={styles.rcEventTitle}>{ev.title}</span>
                         {!isNarrow && (
-                          <span className="rc-event-time">
+                          <span className={styles.rcEventTime}>
                             {formatUtcTime(ev.startUtc)}–{formatUtcTime(ev.endUtc)}
                           </span>
                         )}
@@ -229,14 +229,14 @@ export const ResourceCalendar: React.FC<ResourceCalendarProps> = ({
       {/* Tooltip */}
       {tooltip && (
         <div
-          className="rc-tooltip"
+          className={styles.rcTooltip}
           style={{ left: tooltip.x, top: tooltip.y }}
         >
           <strong>{tooltip.event.title}</strong>
           <br />
           {formatUtcTime(tooltip.event.startUtc)} – {formatUtcTime(tooltip.event.endUtc)} UTC
           <br />
-          <span className="rc-tooltip-date">
+          <span className={styles.rcTooltipDate}>
             {new Date(tooltip.event.startUtc).toISOString().slice(0, 10)}
           </span>
         </div>

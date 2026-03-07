@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import type { CalendarEvent, Resource } from "../types";
-import "./WeekView.css";
+import styles from "./WeekView.module.css";
 
 interface WeekViewProps {
   resources: Resource[];
@@ -283,57 +283,57 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
   }
 
   return (
-    <div className={`wv-outer${dragPreview ? " wv-dragging" : ""}`}>
+    <div className={`${styles.wvOuter}${dragPreview ? ` ${styles.wvDragging}` : ''}`}>
 
       {/* ── Navigation ─────────────────────────────────────────────────────── */}
-      <div className="wv-nav">
+      <div className={styles.wvNav}>
         <button
-          className="wv-nav-btn"
+          className={styles.wvNavBtn}
           onClick={() => setWeekStart(d => addDays(d, -7))}
           aria-label="Previous week"
         >&#8249;</button>
-        <span className="wv-week-label">{weekLabel}</span>
+        <span className={styles.wvWeekLabel}>{weekLabel}</span>
         <button
-          className="wv-nav-btn"
+          className={styles.wvNavBtn}
           onClick={() => setWeekStart(d => addDays(d, 7))}
           aria-label="Next week"
         >&#8250;</button>
       </div>
 
       {/* ── Scrollable grid ────────────────────────────────────────────────── */}
-      <div className="wv-scroll-area" ref={scrollRef}>
-        <div className="wv-inner" style={{ minWidth: totalW }}>
+      <div className={styles.wvScrollArea} ref={scrollRef}>
+        <div className={styles.wvInner} style={{ minWidth: totalW }}>
 
           {/* Sticky header: day titles + resource sub-headers */}
-          <div className="wv-header" ref={headerRef}>
+          <div className={styles.wvHeader} ref={headerRef}>
             {/* Corner cell – sticky in both top and left */}
-            <div className="wv-corner" style={{ width: GUTTER_PX, minWidth: GUTTER_PX }} />
+            <div className={styles.wvCorner} style={{ width: GUTTER_PX, minWidth: GUTTER_PX }} />
 
-            <div className="wv-day-headers">
+            <div className={styles.wvDayHeaders}>
               {weekDays.map((day, di) => {
                 const dow = day.getUTCDay();
                 const isWE = dow === 0 || dow === 6;
                 return (
                   <div
                     key={di}
-                    className={`wv-day-hdr${isWE ? " wv-day-hdr--we" : ""}`}
+                    className={`${styles.wvDayHdr}${isWE ? ` ${styles.wvDayHdrWe}` : ''}`}
                     style={{ width: dayColW, minWidth: dayColW }}
                   >
                     {/* Row 1: weekday name + date */}
-                    <div className="wv-day-title">
+                    <div className={styles.wvDayTitle}>
                       {WEEKDAY_SHORT[dow]}&nbsp;{day.getUTCDate()}&nbsp;{MONTH_SHORT[day.getUTCMonth()]}
                     </div>
                     {/* Row 2: one cell per resource */}
-                    <div className="wv-subcol-headers">
+                    <div className={styles.wvSubcolHeaders}>
                       {resources.map(r => (
                         <div
                           key={r.id}
-                          className="wv-subcol-hdr"
+                          className={styles.wvSubcolHdr}
                           style={{ width: SUBCOL_PX, minWidth: SUBCOL_PX }}
                           title={r.name}
                         >
-                          <span className="wv-dot" style={{ background: r.color }} />
-                          <span className="wv-subcol-name">{r.name}</span>
+                          <span className={styles.wvDot} style={{ background: r.color }} />
+                          <span className={styles.wvSubcolName}>{r.name}</span>
                         </div>
                       ))}
                     </div>
@@ -344,18 +344,18 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
           </div>
 
           {/* Body: time gutter + day columns */}
-          <div className="wv-body">
+          <div className={styles.wvBody}>
 
             {/* Time gutter – sticky left, contains hour labels */}
             <div
-              className="wv-gutter"
+              className={styles.wvGutter}
               style={{ width: GUTTER_PX, minWidth: GUTTER_PX, height: DAY_H_PX }}
             >
               {/* One label per hour, each spanning HOUR_PX = 24 px (12 × 2 px slots). */}
               {HOURS_24.map(h => (
                 <div
                   key={h}
-                  className="wv-hour-label"
+                  className={styles.wvHourLabel}
                   style={{ top: h * HOUR_PX, height: HOUR_PX }}
                 >
                   {fmtHour(h)}
@@ -370,14 +370,14 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
               return (
                 <div
                   key={di}
-                  className={`wv-day-col${isWE ? " wv-day-col--we" : ""}`}
+                  className={`${styles.wvDayCol}${isWE ? ` ${styles.wvDayColWe}` : ''}`}
                   style={{ width: dayColW, height: DAY_H_PX }}
                 >
                   {/* Horizontal hour gridlines spanning the full day column */}
                   {HOURS_24.map(h => (
                     <div
                       key={h}
-                      className="wv-hour-line"
+                      className={styles.wvHourLine}
                       style={{ top: h * HOUR_PX }}
                     />
                   ))}
@@ -386,7 +386,7 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
                   {HOURS_24.map(h => (
                     <div
                       key={h}
-                      className="wv-half-line"
+                      className={styles.wvHalfLine}
                       style={{ top: h * HOUR_PX + HOUR_PX / 2 }}
                     />
                   ))}
@@ -397,22 +397,23 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
                     return (
                       <div
                         key={resource.id}
-                        className="wv-subcol"
+                        className={styles.wvSubcol}
                         style={{ left: ri * SUBCOL_PX, width: SUBCOL_PX }}
                         onMouseDown={e => {
-                          if ((e.target as HTMLElement).closest(".wv-event")) return;
+                          if ((e.target as HTMLElement).closest("[data-event]")) return;
                           e.preventDefault();
                           initDrag(e.clientY, di, resource.id);
                         }}
                         onTouchStart={e => {
-                          if ((e.target as HTMLElement).closest(".wv-event")) return;
+                          if ((e.target as HTMLElement).closest("[data-event]")) return;
                           initDrag(e.touches[0].clientY, di, resource.id);
                         }}
                       >
                         {cellEvents(day, resource.id).map(({ ev, topPx, heightPx }) => (
                           <div
                             key={ev.id}
-                            className="wv-event"
+                            data-event="true"
+                            className={styles.wvEvent}
                             style={{
                               top: topPx,
                               height: heightPx,
@@ -423,13 +424,13 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
                           >
                             {/* Show title only when the event block is at least one hour tall */}
                             {heightPx >= HOUR_PX && (
-                              <span className="wv-event-title">{ev.title}</span>
+                              <span className={styles.wvEventTitle}>{ev.title}</span>
                             )}
                           </div>
                         ))}
                         {preview && (
                           <div
-                            className="wv-drag-preview"
+                            className={styles.wvDragPreview}
                             style={{ top: preview.topPx, height: preview.heightPx }}
                           />
                         )}
@@ -446,14 +447,14 @@ export const WeekView: React.FC<WeekViewProps> = ({ resources, events, startDate
       {/* Tooltip */}
       {tooltip && (
         <div
-          className="wv-tooltip"
+          className={styles.wvTooltip}
           style={{ left: tooltip.x, top: tooltip.y }}
         >
           <strong>{tooltip.ev.title}</strong>
           <br />
           {fmtTime(tooltip.ev.startUtc)} – {fmtTime(tooltip.ev.endUtc)} UTC
           <br />
-          <span className="wv-tooltip-date">
+          <span className={styles.wvTooltipDate}>
             {new Date(tooltip.ev.startUtc).toISOString().slice(0, 10)}
           </span>
         </div>
